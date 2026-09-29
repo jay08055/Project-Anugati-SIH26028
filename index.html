@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Anugati | Railway Operations Control Room</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+  <!-- Top Navigation Bar -->
+  <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-wrap justify-between items-center">
+    <div class="flex items-center space-x-3">
+      <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+      <h1 class="text-xl font-bold tracking-wider text-amber-400">PROJECT ANUGATI (अनुगति)</h1>
+      <span class="text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded border border-slate-700">SIH26028 | Dynamic Train ETA Engine</span>
+    </div>
+    <div class="flex items-center space-x-4 text-xs font-mono text-slate-400 mt-2 sm:mt-0">
+      <span>CORRIDOR: PUNE - KALYAN (KM 100-160)</span>
+      <span class="text-emerald-400">RTIS FEED: LIVE (30s)</span>
+      <button id="simBtn" onclick="toggleDisruption()" class="bg-amber-600 hover:bg-amber-500 text-white font-semibold px-3 py-1.5 rounded transition">
+        Simulate Bottleneck (KM 124)
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto p-6 space-y-6">
+    <!-- Key Metrics -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg">
+        <div class="text-xs text-slate-400 uppercase font-semibold">Model Accuracy</div>
+        <div class="text-2xl font-bold text-emerald-400 mt-1">94.8%</div>
+        <div class="text-xs text-slate-500">vs Static Timetable: 61.2%</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg">
+        <div class="text-xs text-slate-400 uppercase font-semibold">Average ETA Drift</div>
+        <div id="driftVal" class="text-2xl font-bold text-amber-400 mt-1">&plusmn;2.3 min</div>
+        <div class="text-xs text-slate-500">NTES Baseline: &plusmn;36.4 min</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg">
+        <div class="text-xs text-slate-400 uppercase font-semibold">Active Block Sections</div>
+        <div class="text-2xl font-bold text-slate-200 mt-1">6 Monitored</div>
+        <div class="text-xs text-emerald-400">Headway: Clear</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-lg">
+        <div class="text-xs text-slate-400 uppercase font-semibold">Caution Orders (TSR)</div>
+        <div id="tsrVal" class="text-2xl font-bold text-slate-200 mt-1">1 Ingested</div>
+        <div class="text-xs text-amber-400">30 km/h Restriction @ KM 142</div>
+      </div>
+    </div>
+
+    <!-- Live Corridor Track Schematic -->
+    <div class="bg-slate-900 border border-slate-800 p-5 rounded-lg">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="text-sm font-semibold tracking-wide text-slate-300 uppercase">Live Corridor Schematic (Pune Jn &rarr; Kalyan Jn)</h2>
+        <span id="statusTag" class="text-xs px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700">Normal Flow</span>
+      </div>
+      <div class="relative bg-slate-950 p-4 rounded border border-slate-800 flex justify-between items-center text-xs font-mono text-slate-400 overflow-x-auto">
+        <div class="text-center"><div class="w-2 h-2 rounded-full bg-slate-600 mx-auto mb-1"></div>KM 100<br><span class="text-slate-500">Lonavala</span></div>
+        <div class="flex-1 h-1 bg-slate-800 mx-2 relative">
+          <div id="train1" class="absolute -top-3 left-1/4 bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">12124 Deccan Queen</div>
+        </div>
+        <div class="text-center"><div class="w-2 h-2 rounded-full bg-slate-600 mx-auto mb-1"></div>KM 120<br><span class="text-slate-500">Karjat</span></div>
+        <div class="flex-1 h-1 bg-slate-800 mx-2 relative">
+          <div id="train2" class="absolute -top-3 left-2/3 bg-amber-500 text-slate-950 font-bold text-[10px] px-1.5 py-0.5 rounded shadow">Freight BCN/E</div>
+        </div>
+        <div class="text-center"><div class="w-2 h-2 rounded-full bg-slate-600 mx-auto mb-1"></div>KM 140<br><span class="text-slate-500">Badlapur</span></div>
+        <div class="flex-1 h-1 bg-slate-800 mx-2 relative">
+          <div id="train3" class="absolute -top-3 left-1/2 bg-purple-500 text-white text-[10px] px-1.5 py-0.5 rounded shadow">11008 Deccan Exp</div>
+        </div>
+        <div class="text-center"><div class="w-2 h-2 rounded-full bg-slate-600 mx-auto mb-1"></div>KM 160<br><span class="text-slate-500">Kalyan Jn</span></div>
+      </div>
+    </div>
+
+    <!-- Comparison Table & Visual Graph -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 bg-slate-900 border border-slate-800 p-5 rounded-lg">
+        <h2 class="text-sm font-semibold tracking-wide text-slate-300 uppercase mb-4">Real-Time Forecast Disparity Matrix</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-slate-950 text-slate-400 border-b border-slate-800">
+              <tr>
+                <th class="p-2.5">Train Details</th>
+                <th class="p-2.5">Position</th>
+                <th class="p-2.5">Static NTES ETA</th>
+                <th class="p-2.5 text-amber-400">Anugati Dynamic ETA</th>
+                <th class="p-2.5">Variance</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody" class="divide-y divide-slate-800 text-slate-300">
+              <tr>
+                <td class="p-2.5 font-bold">12124 Deccan Queen</td>
+                <td class="p-2.5">KM 115 (95 km/h)</td>
+                <td class="p-2.5 text-slate-400">16:40</td>
+                <td id="t1Dynamic" class="p-2.5 font-bold text-emerald-400">16:42 [&plusmn;2 min]</td>
+                <td id="t1Var" class="p-2.5 text-slate-400">+2 min</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold">11008 Deccan Express</td>
+                <td class="p-2.5">KM 148 (72 km/h)</td>
+                <td class="p-2.5 text-slate-400">17:15</td>
+                <td id="t2Dynamic" class="p-2.5 font-bold text-emerald-400">17:18 [&plusmn;3 min]</td>
+                <td id="t2Var" class="p-2.5 text-slate-400">+3 min</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-bold">Freight BCN/E 448</td>
+                <td class="p-2.5">KM 134 (40 km/h)</td>
+                <td class="p-2.5 text-slate-400">18:00</td>
+                <td id="t3Dynamic" class="p-2.5 font-bold text-amber-400">18:14 [&plusmn;5 min]</td>
+                <td id="t3Var" class="p-2.5 text-slate-400">+14 min</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 p-5 rounded-lg flex flex-col justify-between">
+        <div>
+          <h2 class="text-sm font-semibold tracking-wide text-slate-300 uppercase mb-2">Prediction Drift Window (Mins)</h2>
+          <p class="text-xs text-slate-500 mb-4">Static calculation error compounds exponentially with distance; Anugati stabilizes within &plusmn;3 min tolerance.</p>
+        </div>
+        <div class="h-48">
+          <canvas id="driftChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let disrupted = false;
+    const ctx = document.getElementById('driftChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ['Block 1', 'Block 2', 'Block 3', 'Block 4', 'Terminal'],
+        datasets: [
+          { label: 'Static Schedule Drift', data: [4, 12, 22, 31, 38], borderColor: '#f87171', borderDash: [4, 4], fill: false, tension: 0.2 },
+          { label: 'Anugati AI Drift', data: [1, 2, 2.4, 2.1, 2.3], borderColor: '#10b981', fill: false, tension: 0.2 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
+        scales: {
+          x: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+          y: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } }
+        }
+      }
+    });
+
+    function toggleDisruption() {
+      disrupted = !disrupted;
+      const simBtn = document.getElementById('simBtn');
+      const statusTag = document.getElementById('statusTag');
+      const driftVal = document.getElementById('driftVal');
+      const t1Dynamic = document.getElementById('t1Dynamic');
+      const t1Var = document.getElementById('t1Var');
+
+      if (disrupted) {
+        simBtn.className = "bg-rose-600 hover:bg-rose-500 text-white font-semibold px-3 py-1.5 rounded transition";
+        simBtn.innerText = "Reset Corridor Disruption";
+        statusTag.className = "text-xs px-2 py-0.5 rounded bg-rose-900/60 text-rose-300 border border-rose-700 animate-pulse";
+        statusTag.innerText = "Bottleneck Active: Signal Halt KM 124";
+        driftVal.innerText = "\u00B13.1 min";
+        t1Dynamic.className = "p-2.5 font-bold text-rose-400";
+        t1Dynamic.innerText = "17:08 [\u00B14 min]";
+        t1Var.className = "p-2.5 text-rose-400 font-bold";
+        t1Var.innerText = "+28 min (Cascaded)";
+      } else {
+        simBtn.className = "bg-amber-600 hover:bg-amber-500 text-white font-semibold px-3 py-1.5 rounded transition";
+        simBtn.innerText = "Simulate Bottleneck (KM 124)";
+        statusTag.className = "text-xs px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700";
+        statusTag.innerText = "Normal Flow";
+        driftVal.innerText = "\u00B12.3 min";
+        t1Dynamic.className = "p-2.5 font-bold text-emerald-400";
+        t1Dynamic.innerText = "16:42 [\u00B12 min]";
+        t1Var.className = "p-2.5 text-slate-400";
+        t1Var.innerText = "+2 min";
+      }
+    }
+  </script>
+</body>
+  </html>
+  
